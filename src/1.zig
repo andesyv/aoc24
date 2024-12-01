@@ -42,6 +42,26 @@ fn findSumOfNumbersIncreasingInSize(input: NumberLists) u32 {
     return sum;
 }
 
+fn calcSimilarityScore(allocator: std.mem.Allocator, input: NumberLists) std.mem.Allocator.Error!u32 {
+    // Collect all of rhs into a set containing the number of times it appeared
+    var rhs_count = std.AutoHashMap(u32, u32).init(allocator);
+    defer rhs_count.deinit();
+
+    for (input.rhs.items) |v| {
+        const entry = try rhs_count.getOrPutValue(v, 0);
+        entry.value_ptr.* += 1;
+    }
+
+    // For each lhs...
+    var sum: u32 = 0;
+    for (input.lhs.items) |v| {
+        // Increment the sum with lhs * how many times it appeared in rhs
+        sum += v * (rhs_count.get(v) orelse 0);
+    }
+
+    return sum;
+}
+
 pub fn main() void {
     // const input = @embedFile( "../inputs/1.txt");
     const res = @import("inputs");
@@ -54,6 +74,14 @@ pub fn main() void {
 
     const stdout = std.io.getStdOut();
     std.fmt.format(stdout.writer(), "Sum of numbers in increasing size: {d}\n", .{findSumOfNumbersIncreasingInSize(parsed)}) catch |err| {
+        std.debug.panic("Parsing input failed with the following error: {any}\n", .{err});
+    };
+
+    const similarity_score = calcSimilarityScore(allocator, parsed) catch |err| {
+        std.debug.panic("Failed to calculate similarity score with this error: {any}\n", .{err});
+    };
+
+    std.fmt.format(stdout.writer(), "Similarity scores of numbers: {d}\n", .{similarity_score}) catch |err| {
         std.debug.panic("Parsing input failed with the following error: {any}\n", .{err});
     };
 }
@@ -98,4 +126,12 @@ test "sum of numbers increasing in size" {
 
     const result = findSumOfNumbersIncreasingInSize(sut);
     try std.testing.expectEqual(11, result);
+}
+
+test "similarity score" {
+    const sut = try parse(test_allocator, example_input);
+    defer sut.deinit();
+
+    const result = try calcSimilarityScore(test_allocator, sut);
+    try std.testing.expectEqual(31, result);
 }
