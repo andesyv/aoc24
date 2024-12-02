@@ -91,11 +91,33 @@ fn isSafeLevel(levels: []u32) bool {
     return isSafeLevelRecursiveCase(levels, if (a < b) ClimbingMode.Increasing else ClimbingMode.Decreasing);
 }
 
-fn countSafeLevels(reports: Reports) u32 {
+fn countSafeReports(allocator: std.mem.Allocator, reports: Reports, problem_dampener: bool) std.mem.Allocator.Error!u32 {
     var count: u32 = 0;
     for (reports.slice()) |report| {
         if (isSafeLevel(report.slice())) {
             count += 1;
+        } else if (problem_dampener) {
+            const slice = report.slice();
+            // std.debug.print("Original slice is: {any}\n", .{slice});
+            var temp = try ArrayList(u32).initCapacity(allocator, slice.len - 1);
+            for (0..slice.len) |i| {
+                temp.clearRetainingCapacity();
+
+                // Split the slice into 2, divided on i, and then merge them into 1 slice
+                const first = slice[0..i];
+                const second = slice[i + 1..];
+                
+                try temp.appendSlice(first);
+                try temp.appendSlice(second);
+                
+                // std.debug.print("Spliced-slice is: {any}. i is {d}\n", .{temp.items, i});
+
+                if (isSafeLevel(temp.items)) {
+                    count += 1;
+                    break;
+                }
+            }
+            defer temp.deinit();
         }
     }
     return count;
@@ -109,7 +131,17 @@ pub fn main() void {
     };
 
     const stdout = std.io.getStdOut();
-    std.fmt.format(stdout.writer(), "Count of safe reports: {d}\n", .{countSafeLevels(reports)}) catch |err| {
+    var safe_reports = countSafeReports(allocator, reports, false) catch |err| {
+        std.debug.panic("Allocation failure: {any}", .{err});
+    };
+    std.fmt.format(stdout.writer(), "Count of safe reports: {d}\n", .{safe_reports}) catch |err| {
+        std.debug.panic("Writing to stdout failed with the following error: {any}\n", .{err});
+    };
+
+    safe_reports = countSafeReports(allocator, reports, true) catch |err| {
+        std.debug.panic("Allocation failure: {any}", .{err});
+    };
+    std.fmt.format(stdout.writer(), "Count of safe reports with problem dampener: {d}\n", .{safe_reports}) catch |err| {
         std.debug.panic("Writing to stdout failed with the following error: {any}\n", .{err});
     };
 }
@@ -161,6 +193,15 @@ test "parse reports" {
 test "safe levels in example" {
     const sut = try parse(test_allocator, example_input);
     defer sut.deinit();
-    
-    try std.testing.expectEqual(2, countSafeLevels(sut));
+
+    const safe_reports = try countSafeReports(test_allocator , sut, false);
+    try std.testing.expectEqual(2, safe_reports);
+}
+
+test "safe levels with problem dampener in example" {
+    const sut = try parse(test_allocator, example_input);
+    defer sut.deinit();
+
+    const safe_reports = try countSafeReports(test_allocator , sut, true);
+    try std.testing.expectEqual(4, safe_reports);
 }
